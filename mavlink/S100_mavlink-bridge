@@ -1,0 +1,123 @@
+#!/bin/sh
+# MAVLink 桥接服务脚本 - 使用 open: 地址类型
+
+# ==================== 配置参数 ====================
+SERIAL_PORT="/dev/ttyS0"
+BAUD_RATE="57600"
+UDP_PORT="15001"
+UDP_MODE="fork,reuseaddr"
+BIND_IP="0.0.0.0"
+
+PID_FILE="/var/run/socat_mavlink.pid"
+LOG_FILE="/var/log/socat_mavlink.log"
+# ==================================================
+
+# 配置串口参数
+configure_serial() {
+    echo "配置串口 $SERIAL_PORT @ $BAUD_RATE bps..."
+    
+    # 检查串口是否存在
+    if [ ! -e "$SERIAL_PORT" ]; then
+        echo "错误: 串口 $SERIAL_PORT 不存在"
+        return 1
+    fi
+    
+    # 使用 stty 设置波特率
+    stty -F "$SERIAL_PORT" "$BAUD_RATE" cs8 -cstopb -parenb raw -echo
+    
+    if [ $? -eq 0 ]; then
+        echo "串口配置成功"
+        stty -F "$SERIAL_PORT" -a | grep speed
+        return 0
+    else
+        echo "串口配置失败"
+        return 1
+    fi
+}
+
+# 启动服务
+start_service() {
+    # 检查是否已在运行
+    if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
+        echo "服务已在运行 (PID: $(cat $PID_FILE))"
+        return 0
+    fi
+    
+    echo "启动 MAVLink 桥接服务..."
+    
+    # 配置串口
+    configure_serial || exit 1
+    
+    # 使用 open: 打开串口设备
+    # 注意：不能同时使用 open: 和 baud 选项，波特率已由 stty 设置
+    socat -d -d \
+        "open:$SERIAL_PORT,raw,echo=0,nonblock=1" \
+        "UDP-LISTEN:$UDP_PORT,$UDP_MODE,bind=$BIND_IP" \
+        >> "$LOG_FILE" 2>&1 &
+    
+    SOCAT_PID=$!
+    
+    sleep 1
+    if kill -0 $SOCAT_PID 2>/dev/null; then
+        echo $SOCAT_PID > "$PID_FILE"
+        echo "服务启动成功 (PID: $SOCAT_PID)"
+        echo "$(date): 服务启动" >> "$LOG_FILE"
+        return 0
+    else
+        echo "服务启动失败"
+        tail -n 5 "$LOG_FILE"
+        return 1
+    fi
+}
+
+# 停止服务
+stop_service() {
+    echo "停止服务..."
+    if [ -f "$PID_FILE" ]; then
+        kill $(cat "$PID_FILE") 2>/dev/null
+        rm -f "$PID_FILE"
+    fi
+    pkill -f "socat.*$SERIAL_PORT.*UDP-LISTEN:$UDP_PORT" 2>/dev/null
+}
+
+# 查看状态
+status_service() {
+    echo "服务状态:"
+    if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
+        echo "  运行中 (PID: $(cat $PID_FILE))"
+        ps | grep $(cat "$PID_FILE")
+    else
+        echo "  未运行"
+    fi
+    
+    echo "串口状态:"
+    stty -F "$SERIAL_PORT" -a | grep -E "speed|rows" 2>/dev/null || echo "  无法读取串口"
+    
+    echo "UDP端口:"
+    netstat -lun 2>/dev/null | grep ":$UDP_PORT" || echo "  端口 $UDP_PORT 未监听"
+}
+
+case "$1" in
+    start)
+        start_service
+        ;;
+    stop)
+        stop_service
+        ;;
+    restart)
+        stop_service
+        sleep 1
+        start_service
+        ;;
+    status)
+        status_service
+        ;;
+    test)
+        configure_serial
+        echo "读取串口数据 (5秒)..."
+        timeout 5 cat "$SERIAL_PORT" | hexdump -C
+        ;;
+    *)
+        echo "用法: $0 {start|stop|restart|status|test}"
+        ;;
+esac

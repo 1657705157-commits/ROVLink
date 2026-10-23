@@ -1,0 +1,33 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          wz-video
+# Required-Start:    $network
+# Default-Start:     S
+# Default-Stop:      0 1 6
+# Short-Description: 单路图传（ffmpeg -> MediaMTX -> WebRTC/HLS/RTSP）
+### END INIT INFO
+
+SCRIPT=/wz/video_stream_single.sh
+
+case "$1" in
+    start)
+        echo "启动单路图传 ..."
+        "$SCRIPT" start
+        ;;
+    stop)
+        echo "停止单路图传 ..."
+        "$SCRIPT" stop
+        ;;
+    restart)
+        "$SCRIPT" restart
+        ;;
+    status)
+        "$SCRIPT" status
+        ;;
+    *)
+        echo "用法: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac
+
+exit $?
