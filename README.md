@@ -1,9 +1,9 @@
-# 部署包：图传 + MAVLink UDP 中继
+# 一键部署水下 ROV：单路/多路图传与遥测网络链路
 
 从香橙派 RK3588（Buildroot）备份的可移植部署包，用于**迁移到其他 ARM64 开发板**。
 
 - **图传**：摄像头 → ffmpeg（不转码）→ MediaMTX → WebRTC / HLS / RTSP
-- **飞控中继**：飞控串口 → socat → UDP 端口，供局域网内任意设备通过 MAVLink 访问
+- **遥测链路**：飞控串口 → socat → UDP 端口，供局域网内任意设备通过 MAVLink 访问
 
 ---
 
